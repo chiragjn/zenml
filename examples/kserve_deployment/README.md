@@ -58,16 +58,9 @@ The inference pipeline loads the image from the local filesystem and performs
 online predictions on the running KServe inference service.
 
 
-# 🖥 Local Stack
+# 🖥 Cloud Stack
 
 ### 📄 Prerequisites 
-
-For the ZenML KServe deployer to work, these things are required:
-1. Access to a running [Kubernetes cluster](https://kubernetes.io/docs/tutorials/cluster-administration/). The example accepts a `--kubernetes-context` command-line argument. This Kubernetes context needs to point to the Kubernetes cluster where KServe model servers will be deployed. If the context is not explicitly supplied to the example, it defaults to using the locally active context.
-
-2. KServe must be installed and running on the Kubernetes cluster (More information about how to install KServe can be found below or on the [KServe documentation](https://kserve.github.io/website/)).
-
-3. KServe must be able to access whatever storage is used by ZenML to save the artifact. Since  KServe is installed in the Kubernetes cluster, local filesystem storage can't be used. We recommend using a persistent volume or a remote storage service. (e.g. AWS S3, GCS, Azure Blob Storage, etc.).
 
 To run this example, you need to install and initialize ZenML:
 
@@ -85,6 +78,70 @@ cd zenml_examples/kserve_deployment
 # initialize a local ZenML Repository
 zenml init
 ```
+
+For the ZenML KServe deployer to work, these things are required:
+1. Access to a running [Kubernetes cluster](https://kubernetes.io/). The example accepts a `--kubernetes-context` command-line argument. This Kubernetes context needs to point to the Kubernetes cluster where KServe model servers will be deployed. If the context is not explicitly supplied to the example, it defaults to using the locally active context.
+
+2. KServe must be installed and running on the Kubernetes cluster (More information about how to install KServe can be found below or on the [KServe documentation](https://kserve.github.io/website/)).
+
+3. KServe must be able to access whatever storage is used by ZenML to save the artifact. Since  KServe is installed in the Kubernetes cluster, local filesystem storage can't be used. We recommend using a persistent volume or a remote storage service. (e.g. AWS S3, GCS, Azure Blob Storage, etc.).
+
+ 
+### 🚅 That seems like a lot of infrastructure work. Is there a Zen 🧘 way to run this example?
+
+Yes! With [ZenML Stack Recipes](../../docs/book/cloud-guide/stack-recipes.md), you can now provision all the infrastructure you need to run your ZenML pipelines with just a few simple commands.
+
+The flow to get started for this example can be the following:
+
+1. Pull the `gcp-kubeflow-kserve` recipe to your local system. Learn more about what this recipe does from its README.
+
+    ```shell
+    zenml stack recipe pull gcp-kubeflow-kserve
+    ```
+2. (Optional) 🎨 Customize your deployment by editing the default values in the `locals.tf` file.
+
+3. 🚀 Deploy the recipe with this simple command.
+
+    ```shell
+    zenml stack recipe deploy gcp-kubeflow-kserve
+    ```
+    > **Note**
+    > This command can also automatically import the resources created as a ZenML stack for you. Just run it with the `--import` flag and optionally provide a `--stack-name` and you're set! Keep in mind, in that case, you'll need all integrations for this example installed before you run this command.
+
+    > **Note**
+    > You should also have [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) and [docker](https://docs.docker.com/engine/install/) installed on your local system with the local [docker client authorized](https://cloud.google.com/sdk/gcloud/reference/auth/configure-docker) to push to your cloud registry.
+    
+4. You'll notice that a ZenML stack configuration file gets created 🤯! You can run the following command to import the resources as a ZenML stack, manually.
+
+    ```shell
+    zenml stack import <STACK-NAME> <PATH-TO-THE-CREATED-STACK-CONFIG-YAML>
+
+    # set the imported stack as the active stack
+    zenml stack set <STACK-NAME>
+    ```
+
+5. You should now create a secret for the CloudSQL instance that will allow ZenML to connect to it. Use the following command:
+
+    ```bash
+    zenml secrets-manager secret register gcp_mysql_secret --schema=mysql --user=<DB_USER> --password=<PWD> \
+      --ssl_ca=@</PATH/TO/DOWNLOADED/SERVER-CERT> \
+      --ssl_cert=@</PATH/TO/DOWNLOADED/CLIENT-CERT> \
+      --ssl_key=@</PATH/TO/DOWNLOADED/CLIENT-KEY>
+    ```
+
+    The values for the username and password can be obtained by running the following commands inside your recipe directory.
+
+    ```bash
+    terraform output metadata-db-username
+
+    terraform output metadata-db-password
+    ```
+
+    For the certificates, visit the Google Cloud Console to [create a certificate and download the files](https://cloud.google.com/sql/docs/mysql/configure-ssl-instance#:~:text=Cloud%20SQL%20Instances-,To%20open%20the%20Overview%20page%20of%20an%20instance%2C%20click%20the,Click%20Create%20client%20certificate.) to your system.
+
+
+You can now skip directly to the [part of this guide where you define ZenML secrets](#gcp-authentication-with-kserve_gs-secret-schema) for your Kserve component! 
+
 
 ### Installing KServe (e.g. in an GKE cluster)
 
@@ -366,13 +423,16 @@ and set them accordingly for your ZenML secret.
 
 ##### GCP Authentication with kserve_gs secret schema
 
+> **Note**
+> If you're coming to this section after deploying the [`gke-kubeflow-kserve` recipe](https://github.com/zenml-io/mlops-stacks/tree/main/gcp-kubeflow-kserve), you already have a service account created for you. The service account key is available as a file named `kserve_sa_key.json` in the root directory of your recipe. You can jump straight to the `zenml secrets-mannager secret register` command below to register your secret!
+
 Before setting ZenML secrets, we need to create a service account key. 
 This service account will be used to access the GCP Artifact
 Store. for more information, see the [Create and manage service account keys](https://cloud.google.com/iam/docs/creating-managing-service-account-keys#iam-service-account-keys-create-gcloud).
 Once we have the service account key, we can create a ZenML secret with the following command:
 
 ```bash
-zenml secret register -s kserve_gs kserve_secret \
+zenml secrets-manager secret register -s kserve_gs kserve_secret \
     --credentials="@~/sa-deployment-temp.json" \
 
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━┓
@@ -384,7 +444,7 @@ zenml secret register -s kserve_gs kserve_secret \
 ``` 
 
 ```bash
-zenml secret get kserve_secret
+zenml secrets-manager secret get kserve_secret
 ┏━━━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃    SECRET_KEY    │ SECRET_VALUE              ┃
 ┠──────────────────┼───────────────────────────┨
@@ -469,7 +529,7 @@ Pipeline run `tensorflow_inference_pipeline-24_Jul_22-23_58_24_922079` has finis
 The KServe prediction server is running remotely as a Kubernetes service and accepts inference requests at:
     `http://35.243.201.91:80/v1/models/mnist-tensorflow:predict`
     With the hostname: `mnist-tensorflow.kubeflow.example.com.`
-To stop the service, run `zenml served-models delete a9e967a1-9b26-4d5c-855c-e5abba0b020b`.
+To stop the service, run `zenml model-deployer models delete a9e967a1-9b26-4d5c-855c-e5abba0b020b`.
 ```
 
 Example of the Tensorflow inference pipeline when run with the remote Kubeflow stack:
@@ -486,7 +546,7 @@ and Natural Language Processing models, especially in the research domain,
 it is becoming more and more important to have a robust and easy to not only 
 [build ML pipelines with Pytorch](../pytorch/) but also to deploy the models built with it.
 
-[TorchServe](https://torchserve.github.io/website) is an open-source model serving 
+[TorchServe](https://github.com/pytorch/serve) is an open-source model serving 
 framework for PyTorch that makes it easy to deploy Pytorch models at a production 
 scale with low latency and high throughput, it provides default handlers for the most 
 common applications such as object detection and text classification, so you can write
@@ -548,7 +608,7 @@ Pipeline run pytorch_training_deployment_pipeline-04_Aug_22-00_32_11_318689 has 
 The KServe prediction server is running remotely as a Kubernetes service and accepts inference requests at:
     `http://104.196.187.43:80/v1/models/mnist-pytorch:predict`
     With the hostname: `mnist-pytorch.zenml-workloads.example.com.`
-To stop the service, run `zenml served-models delete e7595ac9-7fcf-42c2-82ac-a9e40ee95090`.
+To stop the service, run `zenml model-deployer models delete e7595ac9-7fcf-42c2-82ac-a9e40ee95090`.
 ```
 
 Example of the PyTorch training/deployment pipeline when run with the remote Kubeflow stack:
@@ -579,7 +639,7 @@ Pipeline run `pytorch_inference_pipeline-04_Aug_22-00_35_16_493511` has finished
 The KServe prediction server is running remotely as a Kubernetes service and accepts inference requests at:
     `http://104.196.187.43:80/v1/models/mnist-pytorch:predict`
     With the hostname: `mnist-pytorch.zenml-workloads.example.com.`
-To stop the service, run `zenml served-models delete e7595ac9-7fcf-42c2-82ac-a9e40ee95090`.
+To stop the service, run `zenml model-deployer models delete e7595ac9-7fcf-42c2-82ac-a9e40ee95090`.
 ```
 
 Example of the PyTorch inference pipeline when run with the remote Kubeflow stack:
@@ -589,10 +649,10 @@ Example of the PyTorch inference pipeline when run with the remote Kubeflow stac
 
 ## 🎮 ZenML Served Models CLI
 
-The `zenml served-models list` CLI command can be run to list the active model servers:
+The `zenml model-deployer models list` CLI command can be run to list the active model servers:
 
 ```shell
-$ zenml served-models list
+$ zenml model-deployer models list
 ┏━━━━━━━━┯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━━━┓
 ┃ STATUS │ UUID                                 │ PIPELINE_NAME                           │ PIPELINE_STEP_NAME         │ MODEL_NAME       ┃
 ┠────────┼──────────────────────────────────────┼─────────────────────────────────────────┼────────────────────────────┼──────────────────┨
@@ -603,10 +663,10 @@ $ zenml served-models list
 ```
 
 To get more information about a specific model server, such as the prediction URL,
-the `zenml served-models describe <uuid>` CLI command can be run:
+the `zenml model-deployer models describe <uuid>` CLI command can be run:
 
 ```shell
-$ zenml served-models describe a9e967a1-9b26-4d5c-855c-e5abba0b020b
+$ zenml model-deployer models describe a9e967a1-9b26-4d5c-855c-e5abba0b020b
   Properties of Served Model 62aac6aa-88fd-4eb7-a753-b46f1658775c                                      
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃ MODEL SERVICE PROPERTY   │ VALUE                                                                                                       ┃
@@ -640,17 +700,17 @@ output, so there is a separate CLI command available to retrieve it:
 
 
 ```shell
-$ zenml served-models get-url a9e967a1-9b26-4d5c-855c-e5abba0b020b
+$ zenml model-deployer models get-url a9e967a1-9b26-4d5c-855c-e5abba0b020b
   Prediction URL of Served Model 62aac6aa-88fd-4eb7-a753-b46f1658775c is:
   http://35.243.201.91:80/v1/models/mnist-tensorflow:predict
   and the hostname is: mnist-tensorflow.kubeflow.example.com
 ```
 
-Finally, a model server can be deleted with the `zenml served-models delete <uuid>`
+Finally, a model server can be deleted with the `zenml model-deployer models delete <uuid>`
 CLI command:
 
 ```shell
-$ zenml served-models delete 62aac6aa-88fd-4eb7-a753-b46f1658775c
+$ zenml model-deployer models delete 62aac6aa-88fd-4eb7-a753-b46f1658775c
 ```
 
 ## 🧽 Clean up
@@ -659,7 +719,7 @@ To stop any prediction servers running in the background, use the `zenml model-s
 and `zenml model-server delete <uuid>` CLI commands.:
 
 ```shell
-zenml served-models delete 62aac6aa-88fd-4eb7-a753-b46f1658775c
+zenml model-deployer models delete 62aac6aa-88fd-4eb7-a753-b46f1658775c
 ```
 
 Then delete the remaining ZenML references.
