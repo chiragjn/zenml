@@ -120,6 +120,7 @@ DataFrame's
 DataFrames
 DataLoader
 DataQualityProfileSection
+Databricks
 DatasetProfile
 DatasetProfileView
 Deepchecks
@@ -279,6 +280,7 @@ LocalArtifactStore
 LocalDaemonService
 LocalDaemonService
 LocalDaemonServiceConfig
+LocalDockerOrchestrator
 LocalExample
 LocalOrchestrator
 LocalStack
@@ -560,6 +562,7 @@ UsingWithRDS
 Util
 VPC
 VRAM
+ValidationError
 ValueError
 VertexAI
 VertexOrchestrator
@@ -705,6 +708,7 @@ configmap
 configmaps
 configs
 conll
+containerise
 containerregistry
 copyfile
 cp
@@ -731,6 +735,7 @@ daemonization
 daemonize
 daemonizer
 dango
+databricks
 datadir
 datadrift
 dataframe
@@ -1279,5 +1284,3 @@ zenml
 zenmldocker
 zenmlregistry
 zenserver
-ValidationError
-containerise
