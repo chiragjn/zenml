@@ -15,7 +15,7 @@
 
 import json
 import os
-from typing import Any, Dict, Generator, Optional, Tuple
+from typing import Any, Dict, Generator, Optional, Tuple, cast
 from uuid import UUID
 
 import requests
@@ -182,7 +182,9 @@ class SeldonDeploymentService(BaseService):
             SeldonModelDeployer,
         )
 
-        model_deployer = SeldonModelDeployer.get_active_model_deployer()
+        model_deployer = cast(
+            SeldonModelDeployer, SeldonModelDeployer.get_active_model_deployer()
+        )
         return model_deployer.seldon_client
 
     def check_status(self) -> Tuple[ServiceState, str]:
@@ -352,9 +354,11 @@ class SeldonDeploymentService(BaseService):
         if not self.is_running:
             return None
         namespace = self._get_client().namespace
-        model_deployer = SeldonModelDeployer.get_active_model_deployer()
+        model_deployer = cast(
+            SeldonModelDeployer, SeldonModelDeployer.get_active_model_deployer()
+        )
         return os.path.join(
-            model_deployer.base_url,
+            model_deployer.config.base_url,
             "seldon",
             namespace,
             self.seldon_deployment_name,

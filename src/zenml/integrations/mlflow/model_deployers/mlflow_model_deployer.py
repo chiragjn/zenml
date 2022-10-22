@@ -15,84 +15,63 @@
 
 import os
 import shutil
-import uuid
 from pathlib import Path
-from typing import Any, ClassVar, Dict, List, Optional, cast
+from typing import ClassVar, Dict, List, Optional, Type, cast
 from uuid import UUID
 
-from pydantic import root_validator
-
-from zenml.constants import (
-    DEFAULT_SERVICE_START_STOP_TIMEOUT,
-    LOCAL_STORES_DIRECTORY_NAME,
+from zenml.config.global_config import GlobalConfiguration
+from zenml.constants import DEFAULT_SERVICE_START_STOP_TIMEOUT
+from zenml.integrations.mlflow.flavors.mlflow_model_deployer_flavor import (
+    MLFlowModelDeployerConfig,
+    MLFlowModelDeployerFlavor,
 )
-from zenml.integrations.mlflow import MLFLOW_MODEL_DEPLOYER_FLAVOR
 from zenml.integrations.mlflow.services.mlflow_deployment import (
     MLFlowDeploymentConfig,
     MLFlowDeploymentService,
 )
 from zenml.logger import get_logger
-from zenml.model_deployers.base_model_deployer import BaseModelDeployer
-from zenml.repository import Repository
+from zenml.model_deployers import BaseModelDeployer, BaseModelDeployerFlavor
 from zenml.services import ServiceRegistry
 from zenml.services.local.local_service import SERVICE_DAEMON_CONFIG_FILE_NAME
 from zenml.services.service import BaseService, ServiceConfig
-from zenml.utils.io_utils import (
-    create_dir_recursive_if_not_exists,
-    get_global_config_directory,
-)
+from zenml.utils.io_utils import create_dir_recursive_if_not_exists
 
 logger = get_logger(__name__)
 
 
 class MLFlowModelDeployer(BaseModelDeployer):
-    """MLflow implementation of the BaseModelDeployer.
+    """MLflow implementation of the BaseModelDeployer."""
 
-    Attributes:
-        service_path: the path where the local MLflow deployment service
-        configuration, PID and log files are stored.
-    """
+    NAME: ClassVar[str] = "MLflow"
+    FLAVOR: ClassVar[Type[BaseModelDeployerFlavor]] = MLFlowModelDeployerFlavor
 
-    service_path: str = ""
+    _service_path: Optional[str] = None
 
-    # Class Configuration
-    FLAVOR: ClassVar[str] = MLFLOW_MODEL_DEPLOYER_FLAVOR
-
-    @root_validator(skip_on_failure=True)
-    def set_service_path(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        """Sets the service_path attribute value according to the component UUID.
-
-        Args:
-            values: the dictionary of values to be validated.
+    @property
+    def config(self) -> MLFlowModelDeployerConfig:
+        """Returns the `MLFlowModelDeployerConfig` config.
 
         Returns:
-            The validated dictionary of values.
+            The configuration.
         """
-        if values.get("service_path"):
-            return values
-
-        # not likely to happen, due to Pydantic validation, but mypy complains
-        assert "uuid" in values
-
-        values["service_path"] = cls.get_service_path(values["uuid"])
-        return values
+        return cast(MLFlowModelDeployerConfig, self._config)
 
     @staticmethod
-    def get_service_path(uuid: uuid.UUID) -> str:
+    def get_service_path(id_: UUID) -> str:
         """Get the path where local MLflow service information is stored.
 
-        This includes the deployment service configuration, PID and log files are stored.
+        This includes the deployment service configuration, PID and log files
+        are stored.
 
         Args:
-            uuid: The UUID of the MLflow model deployer.
+            id_: The ID of the MLflow model deployer.
 
         Returns:
             The service path.
         """
         service_path = os.path.join(
-            get_global_config_directory(),
-            LOCAL_STORES_DIRECTORY_NAME,
-            str(uuid),
+            GlobalConfiguration().local_stores_path,
+            str(id_),
         )
         create_dir_recursive_if_not_exists(service_path)
         return service_path
@@ -101,12 +80,25 @@ class MLFlowModelDeployer(BaseModelDeployer):
     def local_path(self) -> str:
         """Returns the path to the root directory.
 
-        This is where all configurations for MLflow deployment daemon processes are stored.
+        This is where all configurations for MLflow deployment daemon processes
+        are stored.
+
+        If the service path is not set in the config by the user, the path is
+        set to a local default path according to the component ID.
 
         Returns:
             The path to the local service root directory.
         """
-        return self.service_path
+        if self._service_path is not None:
+            return self._service_path
+
+        if self.config.service_path:
+            self._service_path = self.config.service_path
+        else:
+            self._service_path = self.get_service_path(self.id)
+
+        create_dir_recursive_if_not_exists(self._service_path)
+        return self._service_path
 
     @staticmethod
     def get_model_server_info(  # type: ignore[override]
@@ -127,37 +119,6 @@ class MLFlowModelDeployer(BaseModelDeployer):
             "SERVICE_PATH": service_instance.status.runtime_path,
             "DAEMON_PID": str(service_instance.status.pid),
         }
-
-    @staticmethod
-    def get_active_model_deployer() -> "MLFlowModelDeployer":
-        """Returns the MLFlowModelDeployer component of the active stack.
-
-        Args:
-            None
-
-        Returns:
-            The MLFlowModelDeployer component of the active stack.
-
-        Raises:
-            TypeError: If the active stack does not contain an MLFlowModelDeployer component.
-        """
-        model_deployer = Repository(  # type: ignore[call-arg]
-            skip_repository_check=True
-        ).active_stack.model_deployer
-
-        if not model_deployer or not isinstance(
-            model_deployer, MLFlowModelDeployer
-        ):
-            raise TypeError(
-                f"The active stack needs to have an MLflow model deployer "
-                f"component registered to be able to deploy models with MLflow. "
-                f"You can create a new stack with an MLflow model "
-                f"deployer component or update your existing stack to add this "
-                f"component, e.g.:\n\n"
-                f"  'zenml model-deployer register mlflow --flavor={MLFLOW_MODEL_DEPLOYER_FLAVOR}'\n"
-                f"  'zenml stack create stack-name -d mlflow ...'\n"
-            )
-        return model_deployer
 
     def deploy_model(
         self,

@@ -22,6 +22,26 @@ implementations for our users to use:
 
 # Requirements
 
+To run this example, you need to install and initialize ZenML:
+
+```shell
+# install CLI
+pip install zenml
+
+# install ZenML integrations
+zenml integration install spark
+
+# pull example
+zenml example pull spark_distributed_programming
+cd zenml_examples/spark_distributed_programming
+
+# initialize a local ZenML Repository
+zenml init
+
+# Start the ZenServer to enable dashboard access
+zenml up
+```
+
 In order to follow this example, you need an AWS account which you can use to
 spin up a few resources. Additionally, you have to install Spark following the 
 instructions [here](https://spark.apache.org/downloads.html).
@@ -248,18 +268,6 @@ zenml artifact-store register spark_artifact_store \
     --authentication_secret=s3_authentication
 ```
 
-Similar to the artifact store, for our **metadata store** on RDS, we will be 
-using an authentication secret.
-
-```bash
-# Register the metadata store using the secret
-zenml metadata-store register spark_metadata_store \
-    --flavor=mysql \
-    --database=zenml \
-    --secret=rds_authentication \
-    --host=$RDS_MYSQL_ENDPOINT
-```
-
 We also register the **container registry** on ECR as follows:
 
 ```bash
@@ -278,7 +286,6 @@ zenml stack register spark_stack \
     -s spark_step_operator \
     -x spark_secrets_manager \
     -a spark_artifact_store \
-    -m spark_metadata_store \
     -c spark_container_registry \
     --set
 ```

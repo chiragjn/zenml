@@ -16,7 +16,7 @@
 import json
 import os
 import re
-from typing import TYPE_CHECKING, Any, Dict, Generator, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Generator, Optional, Tuple, cast
 from uuid import UUID
 
 import requests
@@ -196,23 +196,14 @@ class KServeDeploymentService(BaseService):
 
         Returns:
             The active KServeModelDeployer.
-
-        Raises:
-            TypeError: if the current stack has no KServeModelDeployer.
         """
         from zenml.integrations.kserve.model_deployers.kserve_model_deployer import (
             KServeModelDeployer,
         )
 
-        try:
-            model_deployer = KServeModelDeployer.get_active_model_deployer()
-        except TypeError:
-            raise TypeError(
-                "No active KServe model deployer is present in the active "
-                "stack. Please make sure that a KServe model deployer is "
-                "present in the active stack."
-            )
-        return model_deployer
+        return cast(
+            KServeModelDeployer, KServeModelDeployer.get_active_model_deployer()
+        )
 
     def _get_client(self) -> KServeClient:
         """Get the KServe client from the active KServe model deployer.
@@ -229,7 +220,7 @@ class KServeDeploymentService(BaseService):
             The Kubernetes namespace, or None, if the default namespace is
             used.
         """
-        return self._get_model_deployer().kubernetes_namespace
+        return self._get_model_deployer().config.kubernetes_namespace
 
     def check_status(self) -> Tuple[ServiceState, str]:
         """Check the state of the KServe inference service.
@@ -534,7 +525,7 @@ class KServeDeploymentService(BaseService):
 
         model_deployer = self._get_model_deployer()
         return os.path.join(
-            model_deployer.base_url,
+            model_deployer.config.base_url,
             "v1/models",
             f"{self.crd_name}:predict",
         )
@@ -553,7 +544,7 @@ class KServeDeploymentService(BaseService):
         namespace = self._get_namespace()
 
         model_deployer = self._get_model_deployer()
-        custom_domain = model_deployer.custom_domain or "example.com"
+        custom_domain = model_deployer.config.custom_domain or "example.com"
         return f"{self.crd_name}.{namespace}.{custom_domain}"
 
     def predict(self, request: str) -> Any:

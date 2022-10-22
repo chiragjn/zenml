@@ -14,14 +14,21 @@
 """Base class for all ZenML model deployers."""
 
 from abc import ABC, abstractmethod
-from typing import ClassVar, Dict, Generator, List, Optional
+from typing import ClassVar, Dict, Generator, List, Optional, Type, cast
 from uuid import UUID
 
+from zenml.client import Client
 from zenml.enums import StackComponentType
 from zenml.services import BaseService, ServiceConfig
 from zenml.stack import StackComponent
+from zenml.stack.flavor import Flavor
+from zenml.stack.stack_component import StackComponentConfig
 
 DEFAULT_DEPLOYMENT_START_STOP_TIMEOUT = 300
+
+
+class BaseModelDeployerConfig(StackComponentConfig):
+    """Base config for all model deployers."""
 
 
 class BaseModelDeployer(StackComponent, ABC):
@@ -39,7 +46,7 @@ class BaseModelDeployer(StackComponent, ABC):
     previous version of the same model instead of creating a new model server
     for every new model version (see the `deploy_model` abstract method).
     This functionality can be consumed directly from ZenML pipeline steps, but
-    it can also be used outside of the pipeline to deploy ad hoc models. It is
+    it can also be used outside the pipeline to deploy ad hoc models. It is
     also usually coupled with a standard model deployer step, implemented by
     each integration, that hides the details of the deployment process away from
     the user.
@@ -59,9 +66,47 @@ class BaseModelDeployer(StackComponent, ABC):
     (see `stop_model_server`, `start_model_server` and `delete_model_server`).
     """
 
-    # Class configuration
-    TYPE: ClassVar[StackComponentType] = StackComponentType.MODEL_DEPLOYER
-    FLAVOR: ClassVar[str]
+    NAME: ClassVar[str]
+    FLAVOR: ClassVar[Type["BaseModelDeployerFlavor"]]
+
+    @property
+    def config(self) -> BaseModelDeployerConfig:
+        """Returns the `BaseModelDeployerConfig` config.
+
+        Returns:
+            The configuration.
+        """
+        return cast(BaseModelDeployerConfig, self._config)
+
+    @classmethod
+    def get_active_model_deployer(cls) -> "BaseModelDeployer":
+        """Get the model deployer registered in the active stack.
+
+        Returns:
+            The model deployer registered in the active stack.
+
+        Raises:
+            TypeError: if a model deployer is not part of the
+                active stack.
+        """
+        flavor: BaseModelDeployerFlavor = cls.FLAVOR()
+        client = Client(skip_client_check=True)  # type: ignore[call-arg]
+        model_deployer = client.active_stack.model_deployer
+        if not model_deployer or not isinstance(model_deployer, cls):
+            raise TypeError(
+                f"The active stack needs to have a {cls.NAME} model "
+                f"deployer component registered to be able deploy models "
+                f"with {cls.NAME}. You can create a new stack with "
+                f"a {cls.NAME} model deployer component or update your "
+                f"active stack to add this component, e.g.:\n\n"
+                f"  `zenml model-deployer register {flavor.name} "
+                f"--flavor={flavor.name} ...`\n"
+                f"  `zenml stack register <STACK-NAME> -d {flavor.name} ...`\n"
+                f"  or:\n"
+                f"  `zenml stack update -d {flavor.name}`\n\n"
+            )
+
+        return model_deployer
 
     @abstractmethod
     def deploy_model(
@@ -225,3 +270,30 @@ class BaseModelDeployer(StackComponent, ABC):
         if len(services) == 0:
             raise RuntimeError(f"No model server found with UUID {uuid}")
         return services[0].get_logs(follow=follow, tail=tail)
+
+
+class BaseModelDeployerFlavor(Flavor):
+    """Base class for model deployer flavors."""
+
+    @property
+    def type(self) -> StackComponentType:
+        """Returns the flavor type.
+
+        Returns:
+            The flavor type.
+        """
+        return StackComponentType.MODEL_DEPLOYER
+
+    @property
+    def config_class(self) -> Type[BaseModelDeployerConfig]:
+        """Returns `BaseModelDeployerConfig` config class.
+
+        Returns:
+                The config class.
+        """
+        return BaseModelDeployerConfig
+
+    @property
+    @abstractmethod
+    def implementation_class(self) -> Type[BaseModelDeployer]:
+        """The class that implements the model deployer."""

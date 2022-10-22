@@ -84,6 +84,9 @@ cd zenml_examples/custom_code_deployment
 
 # initialize a local ZenML Repository
 zenml init
+
+# Start the ZenServer to enable dashboard access
+zenml up
 ```
 
 We will split this into 2 main sections, one for KServe and one for Seldon Core.
@@ -165,7 +168,7 @@ zenml model-deployer register kserve_gke --flavor=kserve \
 zenml artifact-store register gcp_artifact_store --flavor=fcp --path gs://my-bucket
 zenml secrets-manager register local --flavor=local
 zenml container-registry register gcp_registry --flavor=gcp --uri=eu.gcr.io/container-registry
-zenml stack register local_gcp_kserve_stack -m default -a gcp_artifact_store -o default -d kserve_gke -c gcp_registry -x local --set
+zenml stack register local_gcp_kserve_stack -a gcp_artifact_store -o default -d kserve_gke -c gcp_registry -x local --set
 ```
 
 The next sections cover how to setup the GCP Artifact Store credentials for the KServe model deployer. 
@@ -218,7 +221,7 @@ The Training/Deployment pipeline consists of the following steps:
   so that it can first be verified and then packaged with the model checkpoint and all the required artifacts/dependencies
   to be deployed as a custom model.
 
-For more information about custom model deployment, please refer to the [KServe integration custom deployment](https://docs.zenml.io/mlops-stacks/model-deployers/kserve#custom-model-deployment). 
+For more information about custom model deployment, please refer to the [KServe integration custom deployment](https://docs.zenml.io/component-gallery/model-deployers/kserve#custom-model-deployment). 
 Or the [KServe Custom Predictor](https://kserve.github.io/website/0.9/modelserving/v1beta1/custom/custom_model/).
 
 The Inference pipeline consists of the following steps:
@@ -382,7 +385,7 @@ zenml model-deployer register seldon_eks --flavor=seldon \
 zenml artifact-store register gcp_artifact_store --flavor=fcp --path gs://my-bucket
 zenml secrets-manager register local --flavor=local
 zenml container-registry register gcp_registry --flavor=gcp --uri=eu.gcr.io/container-registry
-zenml stack register local_gcp_seldon_stack -m default -a gcp_artifact_store -o default -d seldon_eks -c gcp_registry -x local --set
+zenml stack register local_gcp_seldon_stack -a gcp_artifact_store -o default -d seldon_eks -c gcp_registry -x local --set
 ```
 
 The next sections cover how to set GCP Artifact Store credentials for the Seldon Core model deployer.  
@@ -446,7 +449,7 @@ The Training/Deployment pipeline consists of the following steps:
   so that it can first be verified and then packaged with the model checkpoint and all the required artifacts/dependencies
   to be deployed as a custom model.
 
-For more information about custom model deployment, please refer to the [Seldon Core integration custom deployment](https://docs.zenml.io/mlops-stacks/model-deployers/seldon#custom-model-deployment). 
+For more information about custom model deployment, please refer to the [Seldon Core integration custom deployment](https://docs.zenml.io/component-gallery/model-deployers/seldon#custom-model-deployment). 
 Or the [Seldon Custom Python Model](https://docs.seldon.io/projects/seldon-core/en/latest/python/python_component.html).
 
 The Inference pipeline consists of the following steps:
@@ -621,7 +624,7 @@ rm -rf zenml_examples
 
 # 📜 Learn more
 
-Our docs regarding the custom model deployment can be found [here](https://docs.zenml.io/mlops-stacks/model-deployers#custom-pre-processing-and-post-processing).
+Our docs regarding the custom model deployment can be found [here](https://docs.zenml.io/component-gallery/model-deployers/model-deployers#custom-pre-processing-and-post-processing).
 
 If you want to learn more about the deployment in ZenML in general or about how to build your deployer steps in ZenML
-check out our [docs](https://docs.zenml.io/mlops-stacks/model-deployers/custom).
+check out our [docs](https://docs.zenml.io/component-gallery/model-deployers/custom).

@@ -1,4 +1,4 @@
-# 🚀 KServe Deployment Example - TensorFlow and Pytorch Examples 🚀
+# 🚀 KServe Deployment Example - TensorFlow and Pytorch Examples
 
 [KServe](https://kserve.github.io/website) is a Kubernetes-based model inference platform
 built for highly scalable deployment use cases. It provides a standardized inference protocol 
@@ -77,6 +77,9 @@ cd zenml_examples/kserve_deployment
 
 # initialize a local ZenML Repository
 zenml init
+
+# Start the ZenServer to enable dashboard access
+zenml up
 ```
 
 For the ZenML KServe deployer to work, these things are required:
@@ -114,10 +117,10 @@ The flow to get started for this example can be the following:
 4. You'll notice that a ZenML stack configuration file gets created 🤯! You can run the following command to import the resources as a ZenML stack, manually.
 
     ```shell
-    zenml stack import <STACK-NAME> <PATH-TO-THE-CREATED-STACK-CONFIG-YAML>
+    zenml stack import <STACK_NAME> -f <PATH_TO_THE_CREATED_STACK_CONFIG_YAML>
 
     # set the imported stack as the active stack
-    zenml stack set <STACK-NAME>
+    zenml stack set <STACK_NAME>
     ```
 
 5. You should now create a secret for the CloudSQL instance that will allow ZenML to connect to it. Use the following command:
@@ -370,7 +373,7 @@ zenml model-deployer register kserve_gke --flavor=kserve \
   --secret=kserve_secret
 zenml artifact-store register gcp_artifact_store --flavor=fcp --path gs://my-bucket
 zenml secrets-manager register local --flavor=local
-zenml stack register local_gcp_kserve_stack -m default -a gcp_artifact_store -o default -d kserve_gke -x local --set
+zenml stack register local_gcp_kserve_stack -a gcp_artifact_store -o default -d kserve_gke -x local --set
 ```
 
 ##### KServe and Remote orchestrator like Kubeflow
@@ -730,7 +733,7 @@ rm -rf zenml_examples
 
 # 📜 Learn more
 
-Our docs regarding the KServe deployment integration can be found [here](https://docs.zenml.io/mlops-stacks/model-deployers/kserve).
+Our docs regarding the KServe deployment integration can be found [here](https://docs.zenml.io/component-gallery/model-deployers/kserve).
 
 If you want to learn more about deployment in ZenML in general or about how to build your own deployer steps in ZenML
-check out our [docs](https://docs.zenml.io/mlops-stacks/model-deployers/custom).
+check out our [docs](https://docs.zenml.io/component-gallery/model-deployers/custom).

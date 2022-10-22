@@ -13,14 +13,13 @@
 #  permissions and limitations under the License.
 """Base and meta classes for ZenML integrations."""
 
-import shutil
 from typing import Any, Dict, List, Tuple, Type, cast
 
 import pkg_resources
 
 from zenml.integrations.registry import integration_registry
 from zenml.logger import get_logger
-from zenml.zen_stores.models import FlavorWrapper
+from zenml.stack.flavor import Flavor
 
 logger = get_logger(__name__)
 
@@ -53,8 +52,7 @@ class Integration(metaclass=IntegrationMeta):
     NAME = "base_integration"
 
     REQUIREMENTS: List[str] = []
-
-    SYSTEM_REQUIREMENTS: Dict[str, str] = {}
+    APT_PACKAGES: List[str] = []
 
     @classmethod
     def check_installation(cls) -> bool:
@@ -64,18 +62,6 @@ class Integration(metaclass=IntegrationMeta):
             True if all required packages are installed, False otherwise.
         """
         try:
-            for requirement, command in cls.SYSTEM_REQUIREMENTS.items():
-                result = shutil.which(command)
-
-                if result is None:
-                    logger.debug(
-                        "Unable to find the required packages for %s on your "
-                        "system. Please install the packages on your system "
-                        "and try again.",
-                        requirement,
-                    )
-                    return False
-
             for r in cls.REQUIREMENTS:
                 pkg_resources.get_distribution(r)
             logger.debug(
@@ -101,5 +87,5 @@ class Integration(metaclass=IntegrationMeta):
         """Abstract method to activate the integration."""
 
     @classmethod
-    def flavors(cls) -> List[FlavorWrapper]:
+    def flavors(cls) -> List[Type[Flavor]]:
         """Abstract method to declare new stack component flavors."""

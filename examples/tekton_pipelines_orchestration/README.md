@@ -39,6 +39,9 @@ cd zenml_examples/tekton_pipelines_orchestration
 
 # Initialize a ZenML repository
 zenml init
+
+# Start the ZenServer to enable dashboard access
+zenml up
 ```
 
 ## 🏃 Run the pipeline **without** tekton pipelines
@@ -61,7 +64,7 @@ python run.py --epochs=10
 
 ## 🏃️ Run the same pipeline on a cloud-based Tekton Pipelines deployment
 
-### 📄 Infrastucture Requirements (Pre-requisites)
+### 📄 Infrastructure Requirements (Pre-requisites)
 
 Now with all the installation and initialization out of the way, all that's left
 to do is configuring our ZenML [stack](https://docs.zenml.io/getting-started/core-concepts). For
@@ -91,7 +94,7 @@ When running the upcoming commands, make sure to replace `<PATH_TO_YOUR_CONTAINE
 `<PATH_TO_YOUR_GCP_BUCKET>` with the actual URIs of your container registry and bucket. You will also need to replace
 `<NAME_OF_GCP_KUBERNETES_CONTEXT>` with the kubernetes context pointing to your gcp cluster.
 
-Finally, you would have to replace the MySQL parameters in the metadata store command. In this exampe, we have show-cased the insecure way to do it, but you might want to do it via [secrets](https://docs.zenml.io/mlops-stacks/secrets-managers).
+Finally, you would have to replace the MySQL parameters in the metadata store command. In this example, we have show-cased the insecure way to do it, but you might want to do it via [secrets](https://docs.zenml.io/component-gallery/secrets-managers).
 
 See [here](https://docs.zenml.io/mlops-stacks/metadata-stores/mysql) for more information about setting up a MySQL metadata store on the cloud.
 
@@ -102,16 +105,11 @@ zenml integration install gcp
 # Create and activate the stack and its components
 zenml container-registry register gcr_registry --flavor=gcp --uri=<PATH_TO_YOUR_CONTAINER_REGISTRY>
 
-zenml metadata-store register gcp_metadata_store --flavor=mysql \ 
-    --host=<DATABASE_HOST> --port=<DATABASE_PORT> --database=<DATABASE_NAME> \
-    --username=<DATABASE_USER> --password=<DATABASE_PASSWORD>
-
 zenml artifact-store register gcp_artifact_store --flavor=gcp --path=<PATH_TO_YOUR_GCP_BUCKET>
 
 zenml orchestrator register gcp_tekton_orchestrator --flavor=tekton --kubernetes_context=<NAME_OF_GCP_KUBERNETES_CONTEXT>
 
 zenml stack register gcp_tekton_stack \
-    -m gcp_metadata_store \
     -a gcp_artifact_store \
     -o gcp_tekton_orchestrator \
     -c gcr_registry \
@@ -177,7 +175,7 @@ rm -rf zenml_examples
 
 # 📜 Learn more
 
-Our docs regarding the Tekton orchestrator integration can be found [here](https://docs.zenml.io/mlops-stacks/orchestrators/tekton).
+Our docs regarding the Tekton orchestrator integration can be found [here](https://docs.zenml.io/component-gallery/orchestrators/tekton).
 
 If you want to learn more about orchestrators in general or about how to build your own orchestrators in ZenML
-check out our [docs](https://docs.zenml.io/mlops-stacks/orchestrators/custom).
+check out our [docs](https://docs.zenml.io/component-gallery/orchestrators/custom).

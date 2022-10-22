@@ -19,14 +19,12 @@ google_cloud_ai_platform/training_clients.py
 """
 
 import time
-from typing import TYPE_CHECKING, ClassVar, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, List, Optional, Tuple, cast
 
 from google.cloud import aiplatform
-from pydantic import validator as property_validator
 
 from zenml import __version__
 from zenml.enums import StackComponentType
-from zenml.integrations.gcp import GCP_VERTEX_STEP_OPERATOR_FLAVOR
 from zenml.integrations.gcp.constants import (
     CONNECTION_ERROR_RETRY_LIMIT,
     POLLING_INTERVAL_IN_SECONDS,
@@ -34,93 +32,44 @@ from zenml.integrations.gcp.constants import (
     VERTEX_JOB_STATES_COMPLETED,
     VERTEX_JOB_STATES_FAILED,
 )
+from zenml.integrations.gcp.flavors.vertex_step_operator_flavor import (
+    VertexStepOperatorConfig,
+)
 from zenml.integrations.gcp.google_credentials_mixin import (
     GoogleCredentialsMixin,
 )
 from zenml.logger import get_logger
-from zenml.repository import Repository
-from zenml.runtime_configuration import RuntimeConfiguration
 from zenml.stack import Stack, StackValidator
 from zenml.step_operators import BaseStepOperator
-from zenml.utils import deprecation_utils
 from zenml.utils.pipeline_docker_image_builder import PipelineDockerImageBuilder
 
 if TYPE_CHECKING:
-    from zenml.config.docker_configuration import DockerConfiguration
-    from zenml.config.resource_configuration import ResourceConfiguration
-
+    from zenml.config.pipeline_deployment import PipelineDeployment
+    from zenml.config.step_run_info import StepRunInfo
 logger = get_logger(__name__)
 
+VERTEX_DOCKER_IMAGE_DIGEST_KEY = "vertex_docker_image"
 
-class VertexStepOperator(
-    BaseStepOperator, PipelineDockerImageBuilder, GoogleCredentialsMixin
-):
+
+class VertexStepOperator(BaseStepOperator, GoogleCredentialsMixin):
     """Step operator to run a step on Vertex AI.
 
     This class defines code that can set up a Vertex AI environment and run the
     ZenML entrypoint command in it.
-
-    Attributes:
-        region: Region name, e.g., `europe-west1`.
-        project: GCP project name. If left None, inferred from the
-            environment.
-        accelerator_type: Accelerator type from list: https://cloud.google.com/vertex-ai/docs/reference/rest/v1/MachineSpec#AcceleratorType
-        accelerator_count: Defines number of accelerators to be
-            used for the job.
-        machine_type: Machine type specified here: https://cloud.google.com/vertex-ai/docs/training/configure-compute#machine-types
-        base_image: Base image for building the custom job container.
-        encryption_spec_key_name: Encryption spec key name.
     """
 
-    region: str
-    project: Optional[str] = None
-    accelerator_type: Optional[str] = None
-    accelerator_count: int = 0
-    machine_type: str = "n1-standard-4"
-    base_image: Optional[str] = None
-
-    # customer managed encryption key resource name
-    # will be applied to all Vertex AI resources if set
-    encryption_spec_key_name: Optional[str] = None
-
-    # Class configuration
-    FLAVOR: ClassVar[str] = GCP_VERTEX_STEP_OPERATOR_FLAVOR
-
-    _deprecation_validator = deprecation_utils.deprecate_pydantic_attributes(
-        ("base_image", "docker_parent_image")
-    )
-
-    @property
-    def validator(self) -> Optional[StackValidator]:
-        """Validates that the stack contains a container registry.
-
-        Returns:
-            StackValidator: Validator for the stack.
-        """
-
-        def _ensure_local_orchestrator(stack: Stack) -> Tuple[bool, str]:
-            # For now this only works on local orchestrator and GCP artifact
-            #  store
-            return (
-                (
-                    stack.orchestrator.FLAVOR == "local"
-                    and stack.artifact_store.FLAVOR == "gcp"
-                ),
-                "Only local orchestrator and GCP artifact store are currently "
-                "supported",
-            )
-
-        return StackValidator(
-            required_components={StackComponentType.CONTAINER_REGISTRY},
-            custom_validation_function=_ensure_local_orchestrator,
-        )
-
-    @property_validator("accelerator_type")
-    def validate_accelerator_enum(cls, accelerator_type: Optional[str]) -> None:
-        """Validates that the accelerator type is valid.
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initializes the step operator and validates the accelerator type.
 
         Args:
-            accelerator_type: Accelerator type
+            *args: Variable length argument list.
+            **kwargs: Arbitrary keyword arguments.
+        """
+        super().__init__(*args, **kwargs)
+        self._validate_accelerator_type()
+
+    def _validate_accelerator_type(self) -> None:
+        """Validates that the accelerator type is valid.
 
         Raises:
             ValueError: If the accelerator type is not valid.
@@ -128,35 +77,104 @@ class VertexStepOperator(
         accepted_vals = list(
             aiplatform.gapic.AcceleratorType.__members__.keys()
         )
+        accelerator_type = self.config.accelerator_type
         if accelerator_type and accelerator_type.upper() not in accepted_vals:
             raise ValueError(
                 f"Accelerator must be one of the following: {accepted_vals}"
             )
 
-    def launch(
+    @property
+    def config(self) -> VertexStepOperatorConfig:
+        """Returns the `VertexStepOperatorConfig` config.
+
+        Returns:
+            The configuration.
+        """
+        return cast(VertexStepOperatorConfig, self._config)
+
+    @property
+    def validator(self) -> Optional[StackValidator]:
+        """Validates the stack.
+
+        Returns:
+            A validator that checks that the stack contains a remote container
+            registry and a remote artifact store.
+        """
+
+        def _validate_remote_components(stack: "Stack") -> Tuple[bool, str]:
+            if stack.artifact_store.config.is_local:
+                return False, (
+                    "The Vertex step operator runs code remotely and "
+                    "needs to write files into the artifact store, but the "
+                    f"artifact store `{stack.artifact_store.name}` of the "
+                    "active stack is local. Please ensure that your stack "
+                    "contains a remote artifact store when using the Vertex "
+                    "step operator."
+                )
+
+            container_registry = stack.container_registry
+            assert container_registry is not None
+
+            if container_registry.config.is_local:
+                return False, (
+                    "The Vertex step operator runs code remotely and "
+                    "needs to push/pull Docker images, but the "
+                    f"container registry `{container_registry.name}` of the "
+                    "active stack is local. Please ensure that your stack "
+                    "contains a remote container registry when using the "
+                    "Vertex step operator."
+                )
+
+            return True, ""
+
+        return StackValidator(
+            required_components={StackComponentType.CONTAINER_REGISTRY},
+            custom_validation_function=_validate_remote_components,
+        )
+
+    def prepare_pipeline_deployment(
         self,
-        pipeline_name: str,
-        run_name: str,
-        docker_configuration: "DockerConfiguration",
-        entrypoint_command: List[str],
-        resource_configuration: "ResourceConfiguration",
+        deployment: "PipelineDeployment",
+        stack: "Stack",
     ) -> None:
-        """Launches a step on Vertex AI.
+        """Build a Docker image and push it to the container registry.
 
         Args:
-            pipeline_name: Name of the pipeline which the step to be executed
-                is part of.
-            run_name: Name of the pipeline run which the step to be executed
-                is part of.
-            docker_configuration: The Docker configuration for this step.
+            deployment: The pipeline deployment configuration.
+            stack: The stack on which the pipeline will be deployed.
+        """
+        steps_to_run = [
+            step
+            for step in deployment.steps.values()
+            if step.config.step_operator == self.name
+        ]
+        if not steps_to_run:
+            return
+        docker_image_builder = PipelineDockerImageBuilder()
+        image_digest = docker_image_builder.build_and_push_docker_image(
+            deployment=deployment,
+            stack=stack,
+        )
+        for step in steps_to_run:
+            step.config.extra[VERTEX_DOCKER_IMAGE_DIGEST_KEY] = image_digest
+
+    def launch(
+        self,
+        info: "StepRunInfo",
+        entrypoint_command: List[str],
+    ) -> None:
+        """Launches a step on VertexAI.
+
+        Args:
+            info: Information about the step run.
             entrypoint_command: Command that executes the step.
-            resource_configuration: The resource configuration for this step.
 
         Raises:
             RuntimeError: If the run fails.
             ConnectionError: If the run fails due to a connection error.
         """
-        if resource_configuration.cpu_count or resource_configuration.memory:
+        resource_settings = info.config.resource_settings
+        if resource_settings.cpu_count or resource_settings.memory:
             logger.warning(
                 "Specifying cpus or memory is not supported for "
                 "the Vertex step operator. If you want to run this step "
@@ -171,66 +189,65 @@ class VertexStepOperator(
 
         # Step 1: Authenticate with Google
         credentials, project_id = self._get_authentication()
-        if self.project:
-            if self.project != project_id:
+        if self.config.project:
+            if self.config.project != project_id:
                 logger.warning(
                     "Authenticated with project `%s`, but this orchestrator is "
                     "configured to use the project `%s`.",
                     project_id,
-                    self.project,
+                    self.config.project,
                 )
         else:
-            self.project = project_id
+            self.config.project = project_id
 
-        # Step 2: Build and push image
-        image_name = self.build_and_push_docker_image(
-            pipeline_name=pipeline_name,
-            docker_configuration=docker_configuration,
-            stack=Repository().active_stack,
-            runtime_configuration=RuntimeConfiguration(),
-            entrypoint=" ".join(entrypoint_command),
-        )
+        image_name = info.config.extra[VERTEX_DOCKER_IMAGE_DIGEST_KEY]
 
         # Step 3: Launch the job
         # The AI Platform services require regional API endpoints.
-        client_options = {"api_endpoint": self.region + VERTEX_ENDPOINT_SUFFIX}
+        client_options = {
+            "api_endpoint": self.config.region + VERTEX_ENDPOINT_SUFFIX
+        }
         # Initialize client that will be used to create and send requests.
         # This client only needs to be created once, and can be reused for multiple requests.
         client = aiplatform.gapic.JobServiceClient(
             credentials=credentials, client_options=client_options
         )
         accelerator_count = (
-            resource_configuration.gpu_count or self.accelerator_count
+            resource_settings.gpu_count or self.config.accelerator_count
         )
         custom_job = {
-            "display_name": run_name,
+            "display_name": info.run_name,
             "job_spec": {
                 "worker_pool_specs": [
                     {
                         "machine_spec": {
-                            "machine_type": self.machine_type,
-                            "accelerator_type": self.accelerator_type,
+                            "machine_type": self.config.machine_type,
+                            "accelerator_type": self.config.accelerator_type,
                             "accelerator_count": accelerator_count
-                            if self.accelerator_type
+                            if self.config.accelerator_type
                             else 0,
                         },
                         "replica_count": 1,
                         "container_spec": {
                             "image_uri": image_name,
-                            "command": [],
+                            "command": entrypoint_command,
                             "args": [],
                         },
                     }
                 ]
             },
             "labels": job_labels,
-            "encryption_spec": {"kmsKeyName": self.encryption_spec_key_name}
-            if self.encryption_spec_key_name
+            "encryption_spec": {
+                "kmsKeyName": self.config.encryption_spec_key_name
+            }
+            if self.config.encryption_spec_key_name
             else {},
         }
         logger.debug("Vertex AI Job=%s", custom_job)
 
-        parent = f"projects/{self.project}/locations/{self.region}"
+        parent = (
+            f"projects/{self.config.project}/locations/{self.config.region}"
+        )
         logger.info(
             "Submitting custom job='%s', path='%s' to Vertex AI Training.",
             custom_job["display_name"],

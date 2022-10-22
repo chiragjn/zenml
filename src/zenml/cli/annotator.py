@@ -20,7 +20,6 @@ import click
 from zenml.cli import utils as cli_utils
 from zenml.cli.cli import TagGroup, cli
 from zenml.enums import StackComponentType
-from zenml.repository import Repository
 
 if TYPE_CHECKING:
     from zenml.annotators.base_annotator import BaseAnnotator
@@ -43,19 +42,20 @@ def register_annotator_subcommands() -> None:
         Args:
             ctx: The click Context object.
         """
-        repo = Repository()
-        active_stack = repo.zen_store.get_stack(name=repo.active_stack_name)
-        annotator_wrapper = active_stack.get_component_wrapper(
+        from zenml.client import Client
+        from zenml.stack.stack_component import StackComponent
+
+        annotator_models = Client().active_stack_model.components.get(
             StackComponentType.ANNOTATOR
         )
-        if annotator_wrapper is None:
+        if annotator_models is None:
             cli_utils.error(
                 "No active annotator found. Please register an annotator "
                 "first and add it to your stack."
             )
             return
 
-        ctx.obj = annotator_wrapper.to_component()
+        ctx.obj = StackComponent.from_model(annotator_models[0])
 
     @dataset.command(
         "list",
@@ -88,8 +88,8 @@ def register_annotator_subcommands() -> None:
             labeled_task_count, unlabeled_task_count = stats
         except IndexError:
             cli_utils.error(
-                f"Dataset {dataset_name} does not exist. Please use `zenml annotator dataset list` to "
-                f"list the available datasets."
+                f"Dataset {dataset_name} does not exist. Please use `zenml "
+                f"annotator dataset list` to list the available datasets."
             )
             return
 
@@ -113,7 +113,7 @@ def register_annotator_subcommands() -> None:
     )
     @click.pass_obj
     def dataset_delete(
-        annotator: "BaseAnnotator", dataset_name: str, all: bool
+        annotator: "BaseAnnotator", dataset_name: str, all_: bool
     ) -> None:
         """Delete a dataset.
 
@@ -122,10 +122,12 @@ def register_annotator_subcommands() -> None:
         Args:
             annotator: The annotator stack component.
             dataset_name: Name of the dataset to delete.
-            all: Whether to delete all datasets.
+            all_: Whether to delete all datasets.
         """
         cli_utils.declare(f"Deleting your dataset '{dataset_name}'")
-        dataset_names = annotator.get_dataset_names() if all else [dataset_name]
+        dataset_names = (
+            annotator.get_dataset_names() if all_ else [dataset_name]
+        )
         for dataset_name in dataset_names:
             annotator.delete_dataset(dataset_name=dataset_name)
             cli_utils.declare(f"Dataset '{dataset_name}' has now been deleted.")

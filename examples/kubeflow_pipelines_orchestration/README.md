@@ -54,6 +54,9 @@ cd zenml_examples/kubeflow_pipelines_orchestration
 
 # Initialize a ZenML repository
 zenml init
+
+# Start the ZenServer to enable dashboard access
+zenml up
 ```
 
 ## 📓 Use the notebook 
@@ -120,7 +123,6 @@ in Kubeflow Pipelines.
 zenml container-registry register local_registry --flavor=default --uri=localhost:5000 
 zenml orchestrator register local_kubeflow_orchestrator --flavor=kubeflow
 zenml stack register local_kubeflow_stack \
-    -m default \
     -a default \
     -o local_kubeflow_orchestrator \
     -c local_registry \
@@ -231,10 +233,10 @@ The flow to get started for this example can be the following:
 4. You'll notice that a ZenML stack configuration file gets created 🤯! You can run the following command to import the resources as a ZenML stack, manually.
 
     ```shell
-    zenml stack import <STACK-NAME> <PATH-TO-THE-CREATED-STACK-CONFIG-YAML>
+    zenml stack import <STACK_NAME> -f <PATH_TO_THE_CREATED_STACK_CONFIG_YAML>
 
     # set the imported stack as the active stack
-    zenml stack set <STACK-NAME>
+    zenml stack set <STACK_NAME>
     ```
 
 5. You should now create a secret for the CloudSQL instance that will allow ZenML to connect to it. Use the following command:
@@ -278,11 +280,9 @@ zenml integration install gcp
 
 # Create and activate the stack and its components
 zenml container-registry register gcr_registry --flavor=gcp --uri=<PATH_TO_YOUR_CONTAINER_REGISTRY>
-zenml metadata-store register kubeflow_metadata_store --flavor=kubeflow
 zenml artifact-store register gcp_artifact_store --flavor=gcp --path=<PATH_TO_YOUR_GCP_BUCKET>
 zenml orchestrator register gcp_kubeflow_orchestrator --flavor=kubeflow --kubernetes_context=<NAME_OF_GCP_KUBERNETES_CONTEXT>
 zenml stack register gcp_kubeflow_stack \
-    -m kubeflow_metadata_store \
     -a gcp_artifact_store \
     -o gcp_kubeflow_orchestrator \
     -c gcr_registry \
@@ -328,9 +328,19 @@ zenml stack down --force
 rm -rf zenml_examples
 ```
 
+# ⚠️ Important note for multi-tenant Kubeflow deployments
+
+Kubeflow has a notion of [multi-tenancy](https://www.kubeflow.org/docs/components/multi-tenancy/overview/) 
+built into its deployment. Kubeflow’s multi-user isolation simplifies user 
+operations because each user only views and edits the Kubeflow components 
+and model artifacts defined in their configuration.
+
+Using a multi-tenant deployment of Kubeflow involves a bit more configuration than is shown in this example.
+For details, refer to the [Kubeflow stack component docs](https://docs.zenml.io/component-gallery/orchestrators/kubeflow).
+
 # 📜 Learn more
 
-Our docs regarding the Kubeflow orchestrator integration can be found [here](https://docs.zenml.io/mlops-stacks/orchestrators/kubeflow).
+Our docs regarding the Kubeflow orchestrator integration can be found [here](https://docs.zenml.io/component-gallery/orchestrators/kubeflow).
 
 If you want to learn more about orchestrators in general or about how to build your own orchestrators in ZenML
-check out our [docs](https://docs.zenml.io/mlops-stacks/orchestrators/custom).
+check out our [docs](https://docs.zenml.io/component-gallery/orchestrators/custom).

@@ -77,10 +77,10 @@ The flow to get started for this example can be the following:
 4. You'll notice that a ZenML stack configuration file gets created 🤯! You can run the following command to import the resources as a ZenML stack, manually.
 
     ```shell
-    zenml stack import <STACK-NAME> <PATH-TO-THE-CREATED-STACK-CONFIG-YAML>
+    zenml stack import <STACK_NAME> -f <PATH_TO_THE_CREATED_STACK_CONFIG_YAML>
 
     # set the imported stack as the active stack
-    zenml stack set <STACK-NAME>
+    zenml stack set <STACK_NAME>
     ```
 
 5. You should now create a secret for the CloudSQL instance that will allow ZenML to connect to it. Use the following command:
@@ -110,7 +110,6 @@ Once everything is done on the GCP side, we will need to configure a
 stack with all of these components.
 
 * The **artifact store** to store step outputs in a GCP Bucket.
-* The **metadata store** to track metadata inside a MySQL database.
 * The Docker images that are created to run your pipeline are stored in GCP
   **container registry**.
 * The **Vertex orchestrator** is responsible for running your ZenML pipeline
@@ -134,7 +133,10 @@ cd zenml_examples/vertex_ai_orchestration
 
 # Create a zenml repository
 zenml init
- 
+
+# Start the ZenServer to enable dashboard access
+zenml up
+
 # In order to create the GCP stack components, we'll need to install one 
 # additional ZenML integration:
 zenml integration install gcp
@@ -142,13 +144,6 @@ zenml integration install gcp
 # The CONTAINER_REGISTRY_URI will have a format like this: eu.gcr.io/xxx/xxx
 zenml container-registry register gcp_registry --flavor=gcp --uri=<CONTAINER_REGISTRY_URI>
 
-# The DB_HOST_IP is the public IP Address of your Database: xx.xx.xxx.xxx
-#  The DB_PORT is 3306 by default - set this in case this default does not apply
-#  The DB_NAME is the name of the database that you have created in GCP as the
-#  metadata store. The `mysql_secret` will be created once the secrets manager
-#  is created and the stack is active.
-zenml metadata-store register gcp_metadata_store --flavor=mysql --host=<DB_HOST_IP> --port=<DB_PORT> --database=<DB_NAME> --secret=mysql_secret
-  
 # The PATH_TO_YOUR_GCP_BUCKET is the path to your GCP bucket: gs://xxx
 zenml artifact-store register gcp_artifact_store --flavor=gcp --path=<PATH_TO_YOUR_GCP_BUCKET>
 
@@ -159,18 +154,10 @@ zenml artifact-store register gcp_artifact_store --flavor=gcp --path=<PATH_TO_YO
 zenml orchestrator register vertex_orch --flavor=vertex --project=<PROJECT_ID> --location=<GCP_LOCATION>
 
 # For the secrets manager, all we'll need it the gcp PROJECT_ID
-zenml secrets-manager register gcp_secrets_manager --flavor=gcp_secrets_manager --project_id=<PROJECT_ID>
+zenml secrets-manager register gcp_secrets_manager --flavor=gcp --project_id=<PROJECT_ID>
 
 # Now we're ready to assemble our stack
-zenml stack register gcp_vertex_stack -m gcp_metadata_store -a gcp_artifact_store -o vertex_orch -c gcp_registry -x gcp_secrets_manager --set
-
-# With the stack up and running, we can now supply the credentials for the 
-#  mysql metadata store. The SSL certificates have to be generated and downloaded
-#  from within the CloudSQL UI
-zenml secrets-manager secret register mysql_secret --schema=mysql --user=<DB_USER> --password=<PWD> \
-  --ssl_ca=@</PATH/TO/DOWNLOADED/SERVER-CERT> \
-  --ssl_cert=@</PATH/TO/DOWNLOADED/CLIENT-CERT> \
-  --ssl_key=@</PATH/TO/DOWNLOADED/CLIENT-KEY>
+zenml stack register gcp_vertex_stack -a gcp_artifact_store -o vertex_orch -c gcp_registry -x gcp_secrets_manager --set
 ```
 
 Your stack should look something like this when you're done:
@@ -219,8 +206,8 @@ costs for storage of artifacts, containers, metadata or secrets.
 
 # 📜 Learn more
 
-Our docs regarding the VertexAI integration can be found [here](https://docs.zenml.io/mlops-stacks/orchestrators/gcloud-vertexai).
+Our docs regarding the VertexAI integration can be found [here](https://docs.zenml.io/component-gallery/orchestrators/gcloud-vertexai).
 
 If you want to learn more about orchestrators in general or about how to build
 your own orchestrators in ZenML
-check out our [docs](https://docs.zenml.io/mlops-stacks/orchestrators/custom).
+check out our [docs](https://docs.zenml.io/component-gallery/orchestrators/custom).
